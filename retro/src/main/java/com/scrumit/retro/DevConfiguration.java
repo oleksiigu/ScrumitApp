@@ -18,11 +18,10 @@ class LoadDatabase {
 
     @Bean
     CommandLineRunner initDatabase(NoteRepository repository) {
-        Note note = Note.builder()
-                .type(NoteType.POSITIVE)
-                .text("Sprint is good")
-                .action("-")
-                .build();
+        Note note = new Note();
+        note.setType(NoteType.POSITIVE);
+        note.setText("Sprint is good");
+        note.setAction("-");
 
         return args -> {
             log.info(MessageFormat.format("Preloading {0}", repository.save(note)));

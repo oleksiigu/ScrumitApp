@@ -4,48 +4,68 @@ import com.scrumit.retro.bean.Note;
 import com.scrumit.retro.dto.UpdateNoteDto;
 import com.scrumit.retro.exceptions.NoteNotFoundException;
 import com.scrumit.retro.repository.NoteRepository;
+import org.springframework.hateoas.CollectionModel;
+import org.springframework.hateoas.EntityModel;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
+import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
 @RestController
 public class NoteController {
+
     private final NoteRepository repository;
 
-    NoteController(NoteRepository repository) {
+    private final NoteModelAssembler assembler;
+
+    NoteController(NoteRepository repository, NoteModelAssembler assembler) {
         this.repository = repository;
+        this.assembler = assembler;
     }
 
     @GetMapping("/notes")
-    Iterable<Note> all(){
-        return repository.findAll();
+    CollectionModel<EntityModel<Note>> all(){
+        List<EntityModel<Note>> notes = repository.findAll().stream()
+                .map(assembler::toModel)
+                .collect(Collectors.toList());
+
+        return CollectionModel.of(notes,
+                linkTo(methodOn(NoteController.class).all()).withSelfRel());
     }
 
     @GetMapping("/notes/{id}")
-    Note one(@PathVariable Long id) {
-        return repository.findById(id).orElseThrow(() -> new NoteNotFoundException(id));
+    EntityModel<Note> one(@PathVariable Long id) {
+        Note note = repository.findById(id).orElseThrow(() -> new NoteNotFoundException(id));
+        return assembler.toModel(note);
     }
 
     @PostMapping("/notes")
-    Note newNote(@RequestBody Note newNote) {
-        return repository.save(newNote);
+    EntityModel<Note> newNote(@RequestBody Note newNote) {
+        return assembler.toModel(repository.save(newNote));
     }
 
     @PutMapping("/notes/{id}")
-    Note updateNote(@RequestBody UpdateNoteDto newNote, @PathVariable Long id){
-        return repository.findById(id)
-                .map(note -> {
-                    note.setText(newNote.getText());
-                    note.setAction(newNote.getAction());
-                    note.setType(newNote.getType());
-                    return repository.save(note);
+    EntityModel<Note> updateNote(@RequestBody UpdateNoteDto newNote, @PathVariable Long id){
+        Note note = repository.findById(id)
+                .map(existing -> {
+                    existing.setText(newNote.getText());
+                    existing.setAction(newNote.getAction());
+                    existing.setType(newNote.getType());
+                    return repository.save(existing);
                 })
                 .orElseGet(() -> {
-                    Note createdNote = Note.builder()
-                            .text(newNote.getText())
-                            .action(newNote.getAction())
-                            .type(newNote.getType())
-                            .build();
+                    Note createdNote = new Note();
+                    createdNote.setText(newNote.getText());
+                    createdNote.setAction(newNote.getAction());
+                    createdNote.setType(newNote.getType());
+
                    return repository.save(createdNote);
                 });
+
+        return assembler.toModel(note);
     }
 
 
