@@ -3,7 +3,9 @@ package com.scrumit.retro.controllers;
 import com.scrumit.retro.bean.Note;
 import com.scrumit.retro.dto.UpdateNoteDto;
 import com.scrumit.retro.exceptions.NoteNotFoundException;
+import com.scrumit.retro.repository.MeetingRepository;
 import com.scrumit.retro.repository.NoteRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.web.bind.annotation.*;
@@ -18,37 +20,42 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 public class NoteController {
 
     private final NoteRepository repository;
-
+    private final MeetingRepository meetingRepository;
     private final NoteModelAssembler assembler;
 
-    NoteController(NoteRepository repository, NoteModelAssembler assembler) {
+    NoteController(NoteRepository repository, MeetingRepository meetingRepository, NoteModelAssembler assembler) {
         this.repository = repository;
+        this.meetingRepository = meetingRepository;
         this.assembler = assembler;
     }
 
-    @GetMapping("/notes")
-    CollectionModel<EntityModel<Note>> all(){
-        List<EntityModel<Note>> notes = repository.findAll().stream()
+    @GetMapping("/meetings/{meetingId}/notes")
+    CollectionModel<EntityModel<Note>> all(@PathVariable(value = "meetingId") Long meetingId) {
+
+        List<EntityModel<Note>> notes = repository.findAllByMeetingId(meetingId).stream()
                 .map(assembler::toModel)
                 .collect(Collectors.toList());
 
         return CollectionModel.of(notes,
-                linkTo(methodOn(NoteController.class).all()).withSelfRel());
+                linkTo(methodOn(NoteController.class).all(meetingId)).withSelfRel());
     }
 
-    @GetMapping("/notes/{id}")
-    EntityModel<Note> one(@PathVariable Long id) {
-        Note note = repository.findById(id).orElseThrow(() -> new NoteNotFoundException(id));
+    @GetMapping("/meetings/{meetingId}/notes/{id}")
+    EntityModel<Note> one(@PathVariable Long meetingId, @PathVariable Long id) {
+        Note note = repository.findByIdAndMeetingId(id, meetingId).orElseThrow(() -> new NoteNotFoundException(id));
         return assembler.toModel(note);
     }
 
-    @PostMapping("/notes")
-    EntityModel<Note> newNote(@RequestBody Note newNote) {
-        return assembler.toModel(repository.save(newNote));
+    @PostMapping("/meetings/{meetingId}/notes")
+    EntityModel<Note> newNote(@PathVariable(value = "meetingId") Long meetingId, @RequestBody Note newNote) {
+        return meetingRepository.findById(meetingId).map(meeting -> {
+           newNote.setMeeting(meeting);
+           return assembler.toModel(repository.save(newNote));
+        }).orElseThrow(() -> new NoteNotFoundException(newNote.getId()));
     }
 
-    @PutMapping("/notes/{id}")
-    EntityModel<Note> updateNote(@RequestBody UpdateNoteDto newNote, @PathVariable Long id){
+    @PutMapping("/meetings/{meetingId}/notes/{id}")
+    EntityModel<Note> updateNote(@RequestBody UpdateNoteDto newNote, @PathVariable Long meetingId, @PathVariable Long id) {
         Note note = repository.findById(id)
                 .map(existing -> {
                     existing.setText(newNote.getText());
